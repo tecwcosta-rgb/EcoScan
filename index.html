@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eco-Scanner 🌱</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2e7d32">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <script type="importmap">
+    {
+      "imports": {
+        "@google/generative-ai": "https://esm.sh/@google/generative-ai@0.21.0"
+      }
+    }
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        :root { --verde: #2e7d32; --verde-claro: #66bb6a; --amarelo: #fdd835; --laranja: #ff9800; --vermelho: #ef5350; --fundo: #f1f8e9; }
+        body { background: var(--fundo); min-height: 100vh; padding-bottom: 80px; }
+        header { background: var(--verde); color: white; padding: 16px; text-align: center; box-shadow: 0 2px 8px #0002; }
+        h1 { font-size: 22px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .container { padding: 20px; max-width: 480px; margin: 0 auto; }
+
+        .camera-box { background: white; border-radius: 16px; padding: 20px; text-align: center; box-shadow: 0 4px 12px #0001; margin-bottom: 20px; }
+        #camera { width: 100%; height: 280px; background: #e8f5e9; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; overflow: hidden; position: relative; }
+        #camera video { width: 100%; height: 100%; object-fit: cover; }
+        .btn { background: var(--verde); color: white; border: none; padding: 14px 24px; border-radius: 10px; font-size: 16px; cursor: pointer; width: 100%; margin: 6px 0; transition: 0.2s; }
+        .btn:hover { background: #256a29; }
+        .btn-secundario { background: white; color: var(--verde); border: 2px solid var(--verde); }
+        .btn-captura { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: auto; padding: 12px 28px; border-radius: 25px; background: white; color: var(--verde); font-weight: 600; box-shadow: 0 2px 10px #0002; }
+
+        .resultado { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px #0001; display: none; animation: surgir 0.3s ease; }
+        .resultado.mostrar { display: block; }
+        @keyframes surgir { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+        .nota { font-size: 48px; font-weight: bold; text-align: center; margin: 10px 0; }
+        .nota.A { color: var(--verde); } .nota.B { color: #8bc34a; } .nota.C { color: var(--amarelo); }
+        .nota.D { color: var(--laranja); } .nota.E { color: var(--vermelho); }
+        .barra { height: 10px; border-radius: 5px; background: #eee; margin: 12px 0; overflow: hidden; }
+        .barra > div { height: 100%; border-radius: 5px; transition: width 0.5s ease; }
+        .info { margin-top: 14px; line-height: 1.7; font-size: 15px; }
+        .info p { margin: 6px 0; }
+        .dados-oficiais { background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 14px 0; border-left: 4px solid var(--verde); font-size: 14px; }
+        .alternativas { margin-top: 16px; padding-top: 16px; border-top: 1px solid #eee; }
+        .alternativas h4 { margin-bottom: 8px; color: var(--verde); }
+        .alternativa-item { padding: 10px 12px; background: #e8f5e9; border-radius: 8px; margin: 6px 0; font-size: 14px; }
+
+        .historico { margin-top: 20px; }
+        .item-hist { background: white; padding: 14px; border-radius: 10px; margin: 8px 0; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 6px #0001; }
+        .item-hist .dados { font-size: 14px; }
+
+        nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; display: flex; justify-content: space-around; padding: 10px 0; box-shadow: 0 -2px 10px #0001; }
+        nav button { background: none; border: none; font-size: 14px; color: #888; cursor: pointer; padding: 6px 12px; }
+        nav button.ativo { color: var(--verde); font-weight: bold; }
+
+        .carregando { text-align: center; padding: 40px 20px; }
+        .carregando span { display: inline-block; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        input[type="file"] { display: none; }
+        h2 { color: var(--verde); margin-bottom: 12px; font-size: 20px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🌱 Eco-Scanner</h1>
+    <p style="font-size:14px; opacity:0.9">Analise o impacto ambiental com IA</p>
+</header>
+
+<div class="container">
+    <!-- Tela de Escaneamento -->
+    <div id="tela-escanear">
+        <div class="camera-box">
+            <div id="camera">📷 Clique para ativar a câmera</div>
+            <button class="btn" onclick="ativarCamera()">📷 Ativar Câmera e Escanear</button>
+            <button class="btn btn-secundario" onclick="document.getElementById('input-foto').click()">🖼️ Enviar foto da galeria</button>
+            <input type="file" id="input-foto" accept="image/*" onchange="processarArquivo(this.files[0])">
+        </div>
+
+        <!-- Resultado da Análise -->
+        <div class="resultado" id="caixa-resultado"></div>
+    </div>
+
+    <!-- Tela Histórico -->
+    <div id="tela-historico" style="display:none">
+        <h2>📋 Histórico de Análises</h2>
+        <div class="historico" id="lista-historico">
+            <p style="text-align:center; color:#666; margin-top:40px">Nenhuma análise salva ainda.</p>
+        </div>
+    </div>
+
+    <!-- Tela Sobre -->
+    <div id="tela-sobre" style="display:none">
+        <h2>ℹ️ Sobre o Eco-Scanner</h2>
+        <div style="background:white; padding:20px; border-radius:16px; margin-top:16px; line-height:1.8">
+            <p>🌍 <strong>Eco-Scanner</strong> usa Inteligência Artificial (Google Gemini) para analisar produtos e informar seu impacto ambiental.</p>
+            <p style="margin-top:12px"><strong>📌 O que analisamos:</strong></p>
+            <ul style="margin-left:20px; margin-top:8px">
+                <li>📦 Material da embalagem e materiais compostos</li>
+                <li>♻️ Grau de reciclabilidade e descarte correto</li>
+                <li>🔢 Código de barras e dados oficiais (Open Food Facts)</li>
+                <li>🏷️ Certificações: Orgânico, FSC, Carbono Neutro, etc.</li>
+                <li>🏭 Pegada de carbono e Eco-Score oficial</li>
+                <li>⚠️ Riscos ambientais e tempo de decomposição</li>
+                <li>💚 Alternativas mais sustentáveis e dicas práticas</li>
+            </ul>
+            <p style="margin-top:16px; text-align:center; color:var(--verde)">🌿 Consumir com consciência é cuidar do futuro!</p>
+        </div>
+    </div>
+</div>
+
+<!-- Navegação Inferior -->
+<nav>
+    <button class="ativo" onclick="mostrarTela('escanear')">🔍 Escanear</button>
+    <button onclick="mostrarTela('historico')">📋 Histórico</button>
+    <button onclick="mostrarTela('sobre')">ℹ️ Sobre</button>
+</nav>
+
+<script type="module">
+  import { GoogleGenerativeAI } from "@google/generative-ai";
+
+  // ==============================================
+  // ⚠️  COLOQUE SUA CHAVE DA API AQUI EMBAIXO
+  // Obtenha grátis em: https://aistudio.google.com
+  // ==============================================
+  const CHAVE_API = "AQ.Ab8RN6IOeUFtRY7EfgP0-CWPaIGGNzFm6HryL_HVjLrDjuo4vA";
+  const genAI = new GoogleGenerativeAI(CHAVE_API);
+  const modelo = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  let dadosUltimaAnalise = {};
+  let streamCameraAtual = null;
+
+  // ============== CONVERSÃO DE IMAGEM ==============
+  async function imagemParaBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const leitor = new FileReader();
+      leitor.onload = () => resolve(leitor.result.split(',')[1]);
+      leitor.onerror = reject;
+      leitor.readAsDataURL(blob);
+    });
+  }
+
+  // ============== INTEGRAÇÃO OPEN FOOD FACTS ==============
+  async function buscarDadosOpenFoodFacts(codigoBarras) {
+    const codigoLimpo = codigoBarras.replace(/\D/g, '');
+    if (!codigoLimpo || codigoLimpo.length < 8) return null;
+    try {
+      const resposta = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${codigoLimpo}.json?fields=product_name,brands,ecoscore_grade,packaging,labels,origins,countries,image_url`,
+        { headers: { 'User-Agent': 'EcoScanner/1.0 (ProjetoPWA; contato@ecoscanner.app)' } }
+      );
+      if (!resposta.ok) return null;
+      const dados = await resposta.json();
+      if (dados.status !== 1) return null;
+      return {
+        nome: dados.product?.product_name || '',
+        marca: dados.product?.brands || '',
+        ecoscore: dados.product?.ecoscore_grade?.toUpperCase() || 'Desconhecido',
+        embalagem: dados.product?.packaging || 'Não cadastrada',
+        certificacoes: dados.product?.labels || '',
+        origem: dados.product?.origins || dados.product?.countries || 'Não informada'
+      };
+    } catch (erro) {
+      console.log("Open Food Facts indisponível:", erro);
+      return null;
+    }
+  }
+
+  function extrairCodigoBarras(texto) {
+    const match = texto.match(/CODIGO_BARRAS:\s*([\d\s]{8,18})/);
+    return match ? match[1].replace(/\D/g, '') : null;
+  }
+
+  // ============== ANÁLISE COM IA ==============
+  async function analisarComIA(base64Imagem) {
+    const caixa = document.getElementById('caixa-resultado');
+    caixa.className = 'resultado mostrar';
+    caixa.innerHTML = `<div class="carregando">🤖 <span>Analisando produto...</span><br><small>Processando com IA</small></div>`;
+
+    const prompt = `
+Você é um analista ambiental sênior especializado em sustentabilidade de produtos e embalagens.
+
+Analise a imagem do produto/embalagem com MÁXIMO DETALHE e responda EXATAMENTE neste formato:
+
+NOTA: Letra de A a E (A=excelente sustentabilidade, E=impacto muito alto)
+PRODUTO: Nome completo e marca
+CATEGORIA: Alimento / Bebida / Limpeza / Cosmético / Outro
+MATERIAL_PRINCIPAL: Ex: Plástico PET, Vidro, Alumínio, Papelão, Plástico PP, etc.
+MATERIAIS_SECUNDARIOS: Listar separados por vírgula ou "Nenhum identificado"
+MATERIAL_COMPOSTO: Sim/Não — Ex: Embalagem com camadas difíceis de separar
+RECICLAVEL: Totalmente / Parcialmente / Não / Desconhecido
+CODIGO_BARRAS: Números visíveis ou "Não visível"
+CERTIFICACOES: Rótulos/certificações — Ex: Orgânico, FSC, Carbono Neutro, Cruelty-Free, B Corp
+ORIGEM: Local / Nacional / Importado — se houver indicação
+PEGADA_CO2: Estimativa por unidade (ex: 0.12kg CO₂)
+VIDA_UTIL: Curta (descartável) / Média / Longa (reutilizável)
+DESTINACAO_CORRETA: Como descartar — Ex: "Reciclagem — Plástico PET"
+IMPACTO_AMBIENTAL: Baixo / Moderado / Alto / Muito alto
+RISCOS_AMBIENTAIS: Ex: "Microplásticos", "Demora 400 anos para decompor", "Tóxico ao solo"
+EXPLICACAO: Resumo claro e educativo sobre o impacto
+ALTERNATIVA_MELHOR: Produto/embalagem mais sustentável e o porquê
+DICA_PRATICA: Ação simples que o consumidor pode fazer
+
+REGRAS:
+- Se algo não for visível, coloque "Não identificado" — NÃO invente dados
+- Seja objetivo, direto e preciso
+- Use português do Brasil
+`;
+
+    try {
+      const resultado = await modelo.generateContent([
+        prompt, { inlineData: { data: base64Imagem, mimeType: "image/jpeg" } }
+      ]);
+      const textoResposta = await resultado.response.text();
+      console.log("Resposta da IA:\n", textoResposta);
+
+      const dadosIA = {};
+      textoResposta.split('\n').forEach(linha => {
+        const partes = linha.split(':');
+        const chave = partes.shift()?.trim();
+        const valor = partes.join(':').trim();
+        if (chave && valor) dadosIA[chave] = valor;
+      });
+      dadosUltimaAnalise = dadosIA;
+
+      // 🆕 Busca dados oficiais se houver código de barras
+      const codigo = extrairCodigoBarras(textoResposta);
+      const dadosOficiais = codigo ? await buscarDadosOpenFoodFacts(codigo) : null;
+      if (dadosOficiais) {
+        if (!dadosIA.NOTA || dadosIA.NOTA === 'C') dadosIA.NOTA = dadosOficiais.ecoscore || dadosIA.NOTA;
+        if (!dadosIA.CERTIFICACOES || dadosIA.CERTIFICACOES === 'Não identificado') {
+          dadosIA.CERTIFICACOES = dadosOficiais.certificacoes || dadosIA.CERTIFICACOES;
+        }
+        if (!dadosIA.ORIGEM || dadosIA.ORIGEM === 'Não identificada') {
+          dadosIA.ORIGEM = dadosOficiais.origem || dadosIA.ORIGEM;
+        }
+        dadosUltimaAnalise.temDadosOficiais = true;
+        dadosUltimaAnalise.oficiais = dadosOficiais;
+      }
+
+      exibirResultado(dadosIA);
+
+    } catch (erro) {
+      console.error("Erro:", erro);
+      caixa.innerHTML = `
+        <div style="color:var(--vermelho);text-align:center;padding:20px">
+          ⚠️ Erro na análise:<br>
+          <small>${erro.message}</small><br>
+          <button class="btn" onclick="location.reload()" style="margin-top:12px">Tentar novamente</button>
+        </div>`;
+    }
+  }
+
+  function exibirResultado(dados) {
+    const nota = dados['NOTA'] || 'C';
+    const porcentagem = { A:95, B:80, C:60, D:40, E:20 }[nota] || 50;
+    const cor = { A:'#2e7d32', B:'#8bc34a', C:'#fdd835', D:'#ff9800', E:'#ef5350' }[nota];
+    const oficiais = dadosUltimaAnalise.oficiais;
+
+    const caixa = document.getElementById('caixa-resultado');
+    caixa.innerHTML = `
+      <h3>📊 Análise Completa</h3>
+      <div class="nota ${nota}">${nota}</div>
+      <div class="barra"><div style="width:${porcentagem}%;background:${cor}"></div></div>
+
+      <div class="info">
+        <p><strong>Produto:</strong> ${dados['PRODUTO'] || 'Não identificado'}</p>
+        <p><strong>Categoria:</strong> ${dados['CATEGORIA'] || '—'}</p>
+        
+        <p style="margin-top:10px"><strong>📦 Materiais:</strong></p>
+        <p>• Principal: ${dados['MATERIAL_PRINCIPAL'] || '—'}</p>
+        <p>• Secundários: ${dados['MATERIAIS_SECUNDARIOS'] || 'Nenhum'}</p>
+        <p>• Material composto: ${dados['MATERIAL_COMPOSTO'] || 'Não'} ${dados['MATERIAL_COMPOSTO'] === 'Sim' ? '<small style="color:var(--laranja)">⚠️ difícil reciclagem</small>' : ''}</p>
+        
+        <p><strong>♻️ Reciclável:</strong> ${dados['RECICLAVEL'] || '—'}</p>
+        
+        ${(dados['CODIGO_BARRAS'] && dados['CODIGO_BARRAS'] !== 'Não visível') 
+          ? `<p><strong>🔢 Código de barras:</strong> ${dados['CODIGO_BARRAS']}</p>` : ''}
+        
+        ${(dados['CERTIFICACOES'] && dados['CERTIFICACOES'] !== 'Não identificado') 
+          ? `<p><strong>🏷️ Certificações:</strong> ${dados['CERTIFICACOES']}</p>` : ''}
+        
+        <p><strong>🌍 Origem:</strong> ${dados['ORIGEM'] || 'Não identificada'}</p>
+        <p><strong>🏭 Pegada de CO₂:</strong> ${dados['PEGADA_CO2'] || '—'}</p>
+        <p><strong>⏳ Vida útil:</strong> ${dados['VIDA_UTIL'] || '—'}</p>
+        <p><strong>🗑️ Descarte correto:</strong> ${dados['DESTINACAO_CORRETA'] || '—'}</p>
+        <p><strong>⚠️ Riscos ambientais:</strong> ${dados['RISCOS_AMBIENTAIS'] || 'Não identificados'}</p>
+        
+        <p style="margin-top:10px;font-style:italic;color:#444">📝 ${dados['EXPLICACAO'] || ''}</p>
+      </div>
+
+      ${oficiais ? `
+      <div class="dados-oficiais">
+        <strong>📊 Dados oficiais — Open Food Facts</strong><br>
+        ${oficiais.nome ? `<strong>Produto:</strong> ${oficiais.nome}<br>` : ''}
+        ${oficiais.marca ? `<strong>Marca:</strong> ${oficiais.marca}<br>` : ''}
+        ${oficiais.ecoscore && oficiais.ecoscore !== 'DESCONHECIDO' 
+          ? `<strong>Eco-Score oficial:</strong> <span style="font-size:18px;font-weight:bold">${oficiais.ecoscore}</span> — cálculo científico ♻️<br>` : ''}
+        <small>Fonte: Open Food Facts — dados abertos colaborativos</small>
+      </div>` : ''}
+
+      <div class="alternativas">
+        <h4>💚 Alternativa mais sustentável:</h4>
+        <div class="alternativa-item">🔹 ${dados['ALTERNATIVA_MELHOR'] || 'Prefira produtos com menos embalagem e locais'}</div>
+        
+        <h4 style="margin-top:10px">💡 Dica prática:</h4>
+        <div class="alternativa-item">✨ ${dados['DICA_PRATICA'] || 'Leve sua própria sacola e prefira refis sempre que possível'}</div>
+      </div>
+
+      <button class="btn" style="margin-top:16px" onclick="salvarNoHistorico()">💾 Salvar Análise</button>
+    `;
+  }
+
+  // ============== CÂMERA E UPLOAD ==============
+  window.ativarCamera = async function() {
+    try {
+      if (streamCameraAtual) streamCameraAtual.getTracks().forEach(t => t.stop());
+      streamCameraAtual = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
+      });
+      const cameraDiv = document.getElementById('camera');
+      cameraDiv.innerHTML = '<video autoplay playsinline id="video-cam" style="width:100%;height:100%;object-fit:cover"></video>';
+      const video = document.getElementById('video-cam');
+      video.srcObject = streamCameraAtual;
+      video.onloadedmetadata = () => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-captura';
+        btn.textContent = '📸 Tirar foto';
+        btn.onclick = capturarFoto;
+        cameraDiv.appendChild(btn);
+      };
+    } catch (erro) {
+      alert("❌ Não foi possível acessar a câmera.\nVerifique as permissões do navegador e tente novamente.");
+    }
+  };
+
+  async function capturarFoto() {
+    const video = document.getElementById('video-cam');
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth / 2;
+    canvas.height = video.videoHeight / 2;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    canvas.toBlob(async blob => {
+      const base64 = await imagemParaBase64(blob);
+      await analisarComIA(base64);
+    }, 'image/jpeg', 0.85);
+  }
+
+  window.processarArquivo = async function(arquivo) {
+    if (!arquivo) return;
+    const base64 = await imagemParaBase64(arquivo);
+    await analisarComIA(base64);
+  };
+
+  // ============== HISTÓRICO ==============
+  window.salvarNoHistorico = function() {
+    const historico = JSON.parse(localStorage.getItem('ecoHistorico') || '[]');
+    const nota = dadosUltimaAnalise['NOTA'] || '-';
+    const produto = dadosUltimaAnalise['PRODUTO'] || 'Produto sem identificação';
+    historico.unshift({ 
+      data: new Date().toLocaleString('pt-BR'), 
+      nota, 
+      produto: produto.substring(0, 60)
+    });
+    localStorage.setItem('ecoHistorico', JSON.stringify(historico));
+    alert("✅ Análise salva no histórico!");
+  };
+
+  window.carregarHistorico = function() {
+    const historico = JSON.parse(localStorage.getItem('ecoHistorico') || '[]');
+    const lista = document.getElementById('lista-historico');
+    if (!historico.length) {
+      lista.innerHTML = '<p style="text-align:center; color:#666; margin-top:40px">Nenhuma análise salva ainda.</p>';
+      return;
+    }
+    lista.innerHTML = historico.map(item => `
+      <div class="item-hist">
+        <div class="dados">
+          <div>📅 ${item.data}</div>
+          <small>${item.produto}</small>
+        </div>
+        <div class="nota ${item.nota}" style="font-size:20px;padding:0 8px">${item.nota}</div>
+      </div>
+    `).join('');
+  };
+
+  // ============== NAVEGAÇÃO ==============
+  window.mostrarTela = function(tela) {
+    document.querySelectorAll('[id^="tela-"]').forEach(el => el.style.display = 'none');
+    document.getElementById(`tela-${tela}`).style.display = 'block';
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('ativo'));
+    event.target.classList.add('ativo');
+    if (tela === 'historico') carregarHistorico();
+  };
+
+  // PWA Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+</script>
+</body>
+</html>
