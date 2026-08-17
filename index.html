@@ -10,7 +10,7 @@
     <script type="importmap">
     {
       "imports": {
-        "@google/generative-ai": "https://esm.sh/@google/generative-ai@0.21.0"
+        "@google/generative-ai": "https://cdn.jsdelivr.net/npm/@google/generative-ai@0.21.0/+esm"
       }
     }
     </script>
@@ -34,8 +34,8 @@
         .resultado.mostrar { display: block; }
         @keyframes surgir { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
         .nota { font-size: 48px; font-weight: bold; text-align: center; margin: 10px 0; }
-        .nota.A { color: var(--verde); } .nota.B { color: #8bc34a; } .nota.C { color: var(--amarelo); }
-        .nota.D { color: var(--laranja); } .nota.E { color: var(--vermelho); }
+        .nota.A { color: var(--verde); } .nota.B { color: #8bc34a; } .nota.C { color: #fdd835; }
+        .nota.D { color: #ff9800; } .nota.E { color: #ef5350; }
         .barra { height: 10px; border-radius: 5px; background: #eee; margin: 12px 0; overflow: hidden; }
         .barra > div { height: 100%; border-radius: 5px; transition: width 0.5s ease; }
         .info { margin-top: 14px; line-height: 1.7; font-size: 15px; }
@@ -59,6 +59,7 @@
 
         input[type="file"] { display: none; }
         h2 { color: var(--verde); margin-bottom: 12px; font-size: 20px; }
+        .aviso-cors { background: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin-bottom: 15px; border-radius: 6px; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -69,9 +70,20 @@
 </header>
 
 <div class="container">
+    <div class="aviso-cors" id="aviso-cors" style="display:none;">
+        ⚠️ <strong>Aviso:</strong> Para funcionar, use um servidor local (ex: <code>npx serve</code>) e cole sua chave API abaixo.
+    </div>
+
     <!-- Tela de Escaneamento -->
     <div id="tela-escanear">
         <div class="camera-box">
+            <div style="margin-bottom:12px; text-align:left;">
+                <label style="font-weight:bold;">🔑 Chave API Gemini:</label>
+                <input type="password" id="campo-chave" placeholder="Cole sua chave aqui" 
+                    style="width:100%; padding:10px; margin-top:6px; border:1px solid #ccc; border-radius:6px; font-size:14px;">
+                <small style="color:#666; font-size:12px;">Obtenha grátis em: <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--verde)">aistudio.google.com/app/apikey</a></small>
+            </div>
+            <hr style="border:none; border-top:1px dashed #ccc; margin:12px 0;">
             <div id="camera">📷 Clique para ativar a câmera</div>
             <button class="btn" onclick="ativarCamera()">📷 Ativar Câmera e Escanear</button>
             <button class="btn btn-secundario" onclick="document.getElementById('input-foto').click()">🖼️ Enviar foto da galeria</button>
@@ -117,19 +129,36 @@
     <button onclick="mostrarTela('sobre')">ℹ️ Sobre</button>
 </nav>
 
+
 <script type="module">
   import { GoogleGenerativeAI } from "@google/generative-ai";
 
   // ==============================================
-  // ⚠️  COLOQUE SUA CHAVE DA API AQUI EMBAIXO
-  // Obtenha grátis em: https://aistudio.google.com
+  // ⚙️ CONFIGURAÇÃO
   // ==============================================
-  const CHAVE_API = "AQ.Ab8RN6IOeUFtRY7EfgP0-CWPaIGGNzFm6HryL_HVjLrDjuo4vA";
-  const genAI = new GoogleGenerativeAI(CHAVE_API);
-  const modelo = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  const MODELO_NOME = "gemini-3.5-flash"; // ✅ Modelo válido
 
+  let genAI = null;
+  let modelo = null;
   let dadosUltimaAnalise = {};
   let streamCameraAtual = null;
+
+  // Inicializa quando usuário digita a chave
+  function inicializarComChave(chave) {
+    if (!chave || chave.trim().length < 20) {
+      alert("❌ Digite uma chave API válida!");
+      return false;
+    }
+    try {
+      genAI = new GoogleGenerativeAI(chave.trim());
+      modelo = genAI.getGenerativeModel({ model: MODELO_NOME });
+      console.log("✅ API inicializada com sucesso!");
+      return true;
+    } catch (e) {
+      alert("❌ Erro ao inicializar: " + e.message);
+      return false;
+    }
+  }
 
   // ============== CONVERSÃO DE IMAGEM ==============
   async function imagemParaBase64(blob) {
@@ -174,6 +203,10 @@
 
   // ============== ANÁLISE COM IA ==============
   async function analisarComIA(base64Imagem) {
+    // Pega a chave do campo de digitação
+    const chave = document.getElementById('campo-chave').value;
+    if (!modelo && !inicializarComChave(chave)) return;
+
     const caixa = document.getElementById('caixa-resultado');
     caixa.className = 'resultado mostrar';
     caixa.innerHTML = `<div class="carregando">🤖 <span>Analisando produto...</span><br><small>Processando com IA</small></div>`;
@@ -243,17 +276,23 @@ REGRAS:
 
     } catch (erro) {
       console.error("Erro:", erro);
+      let mensagem = erro.message;
+      if (mensagem.includes('400') || mensagem.includes('API key')) {
+        mensagem = "Chave API inválida ou não autorizada. Verifique sua chave em aistudio.google.com";
+      } else if (mensagem.includes('403') || mensagem.includes('CORS') || mensagem.includes('fetch')) {
+        mensagem = "Bloqueio de segurança (CORS). Use um servidor local como 'npx serve' ou hospede online.";
+      }
       caixa.innerHTML = `
         <div style="color:var(--vermelho);text-align:center;padding:20px">
           ⚠️ Erro na análise:<br>
-          <small>${erro.message}</small><br>
+          <small>${mensagem}</small><br>
           <button class="btn" onclick="location.reload()" style="margin-top:12px">Tentar novamente</button>
         </div>`;
     }
   }
 
   function exibirResultado(dados) {
-    const nota = dados['NOTA'] || 'C';
+    const nota = (dados['NOTA'] || 'C').toUpperCase().trim();
     const porcentagem = { A:95, B:80, C:60, D:40, E:20 }[nota] || 50;
     const cor = { A:'#2e7d32', B:'#8bc34a', C:'#fdd835', D:'#ff9800', E:'#ef5350' }[nota];
     const oficiais = dadosUltimaAnalise.oficiais;
@@ -394,6 +433,11 @@ REGRAS:
     event.target.classList.add('ativo');
     if (tela === 'historico') carregarHistorico();
   };
+
+  // Detecta se está rodando como arquivo local e mostra aviso
+  if (window.location.protocol === 'file:') {
+    document.getElementById('aviso-cors').style.display = 'block';
+  }
 
   // PWA Service Worker
   if ('serviceWorker' in navigator) {
